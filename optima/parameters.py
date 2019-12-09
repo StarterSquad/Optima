@@ -508,7 +508,7 @@ class Constant(Par):
         ''' Update the prior parameters to match the metaparameter, so e.g. can recalibrate and then do uncertainty '''
         if self.prior.dist=='uniform':
             tmppars = array(self.prior.pars) # Convert to array for numerical magic
-            self.prior.pars = tuple(self.y*tmppars/tmppars.mean()) # Recenter the limits around the mean
+            self.prior.pars = sanitizeprior(self.prior.pars, self.y)
             printv('Priors updated for %s' % self.short, 3, verbose)
         else:
             errormsg = 'Distribution "%s" not defined; available choices are: uniform or bust, bro!' % self.dist
@@ -560,19 +560,19 @@ class Metapar(Par):
         ''' Return the valid keys for using with this parameter '''
         return self.y.keys()
     
-    def sample(self, randseed=None):
+    def sample(self, randseed=None, verbose=False):
         ''' Recalculate ysample '''
         self.ysample = odict()
         for key in self.keys():
             self.ysample[key] = self.prior[key].sample(randseed=randseed)[0]
+            if verbose: print(self.name, key, self.prior[key].pars, self.ysample[key]) # For debugging only
         return None
     
     def updateprior(self, verbose=2):
         ''' Update the prior parameters to match the y values, so e.g. can recalibrate and then do uncertainty '''
         for key in self.keys():
             if self.prior[key].dist=='uniform':
-                tmppars = array(self.prior[key].pars) # Convert to array for numerical magic
-                self.prior[key].pars = tuple(self.y[key]*tmppars/tmppars.mean()) # Recenter the limits around the mean
+                self.prior[key].pars = sanitizeprior(self.prior[key].pars, self.y[key])
                 printv('Priors updated for %s' % self.short, 3, verbose)
             else:
                 errormsg = 'Distribution "%s" not defined; available choices are: uniform or bust, bro!' % self.dist
@@ -647,8 +647,7 @@ class Timepar(Par):
     def updateprior(self, verbose=2):
         ''' Update the prior parameters to match the metaparameter, so e.g. can recalibrate and then do uncertainty '''
         if self.prior.dist=='uniform':
-            tmppars = array(self.prior.pars) # Convert to array for numerical magic
-            self.prior.pars = tuple(self.m*tmppars/tmppars.mean()) # Recenter the limits around the mean
+            self.prior.pars = sanitizeprior(self.prior.pars, self.m)
             printv('Priors updated for %s' % self.short, 3, verbose)
         else:
             errormsg = 'Distribution "%s" not defined; available choices are: uniform or bust, bro!' % self.dist
@@ -715,8 +714,7 @@ class Popsizepar(Par):
     def updateprior(self, verbose=2):
         ''' Update the prior parameters to match the metaparameter -- same as Timepar '''
         if self.prior.dist=='uniform':
-            tmppars = array(self.prior.pars) # Convert to array for numerical magic
-            self.prior.pars = tuple(self.m*tmppars/tmppars.mean()) # Recenter the limits around the mean
+            self.prior.pars = sanitizeprior(self.prior.pars, self.m)
             printv('Priors updated for %s' % self.short, 3, verbose)
         else:
             errormsg = 'Distribution "%s" not defined; available choices are: uniform or bust, bro!' % self.dist
@@ -1473,7 +1471,13 @@ def sanitycheck(simpars=None, showdiff=True, threshold=0.1, eps=1e-6):
     return outstr
 
 
-
+def sanitizeprior(pars, m):
+    tmppars = array(pars) # Convert to array for numerical magic
+    if (tmppars==0).all():
+        tmppars = array([0.9, 1.1]) # Reset
+    tmpparssum = max(Settings().eps, tmppars.mean()) # Ensure it's nonzero
+    newpars = tuple(m*tmppars/tmpparssum) # Recenter the limits around the mean
+    return newpars
 
 
 

@@ -66,7 +66,7 @@ class Coveragescen(Progscen):
         self.coverage = coverage
 
 
-def runscenarios(project=None, verbose=2, name=None, defaultparset=-1, debug=False, nruns=None, base=None, ccsample=None, randseed=None, **kwargs):
+def runscenarios(project=None, verbose=2, name=None, defaultparset=-1, debug=False, nruns=None, base=None, ccsample=None, randseed=None, separateoutput=None, **kwargs):
     """
     Run all the scenarios.
     Version: 2017aug15
@@ -117,7 +117,8 @@ def runscenarios(project=None, verbose=2, name=None, defaultparset=-1, debug=Fal
     for scen in scenlist: scen.resultsref = multires.uid # Copy results into each scenario that's been run
     scenres = odict()
     scenres[name] = multires
-    return scenres
+    if separateoutput: return allresults # Return the individual parameter sets
+    else:              return scenres
 
 
 
