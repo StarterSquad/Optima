@@ -242,7 +242,7 @@ def makeplots(results=None, toplot=None, die=False, verbose=2, plotstartyear=Non
 def plotepi(results, toplot=None, uncertainty=True, die=True, showdata=True, verbose=2, figsize=globalfigsize, 
             alpha=0.2, lw=2, dotsize=30, titlesize=globaltitlesize, labelsize=globallabelsize, ticksize=globalticksize, 
             legendsize=globallegendsize, position=None, useSIticks=True, colors=None, reorder=None, plotstartyear=None, 
-            plotendyear=None, interactive=None, fig=None, forreport=False, **kwargs):
+            plotendyear=None, interactive=None, fig=None, forreport=False, forceintegerxaxis=False, **kwargs):
         '''
         Render the plots requested and store them in a list. Argument "toplot" should be a list of form e.g.
         ['prev-tot', 'inci-pop']
@@ -508,6 +508,8 @@ def plotepi(results, toplot=None, uncertainty=True, die=True, showdata=True, ver
                     ax.set_xlabel('Year', fontsize=labelsize)
                     ax.set_title(plottitle, fontsize=titlesize) # overwrites previously set title
                 setylim(allydata, ax=ax)
+                if forceintegerxaxis:
+                    ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
                 ax.set_xlim((results.tvec[startind], results.tvec[endind]))
                 if not ismultisim:
                     if isstacked: 
