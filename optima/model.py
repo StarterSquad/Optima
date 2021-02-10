@@ -83,7 +83,8 @@ def model(simpars=None, settings=None, initpeople=None, verbose=None, die=False,
     aidslinktocare  = 1.-exp(-dt/(maximum(eps,simpars['aidslinktocare'])))# Probability of being linked to care in 1 time step for people with AIDS
     leavecare       = simpars['leavecare']*dt                             # Proportion of people lost to follow-up per year
     aidsleavecare   = simpars['aidsleavecare']*dt                         # Proportion of people with AIDS being lost to follow-up per year
-    regainvs         = simpars['regainvs']                                  # Proportion of people who switch regimens when found to be failing
+    returntocare    = 1.-exp(-dt/(maximum(eps,simpars['returntocare'])))  # Probability of being returned to care after loss to follow-up in 1 time step
+    regainvs         = simpars['regainvs']                                # Proportion of people who switch regimens when found to be failing
         
     # Disease state indices
     susreg          = settings.susreg               # Susceptible, regular
@@ -97,7 +98,7 @@ def model(simpars=None, settings=None, initpeople=None, verbose=None, die=False,
     alltx           = settings.alltx                # All on treatment
     allplhiv        = settings.allplhiv             # All PLHIV
     notonart        = settings.notonart             # All PLHIV who are not on ART    
-    dxnotincare     = settings.dxnotincare          # Diagnosed people not in care
+    dxnotincare     = settings.dxnotincare          # Diagnosed + lost people not in care
     care            = settings.care                 # In care
     usvl            = settings.usvl                 # On treatment - Unsuppressed Viral Load
     svl             = settings.svl                  # On treatment - Suppressed Viral Load
@@ -189,7 +190,9 @@ def model(simpars=None, settings=None, initpeople=None, verbose=None, die=False,
     numvlmon  = simpars['numvlmon']     # Number of viral load tests done per year (N)
     hivtest   = simpars['hivtest']*dt   # HIV testing (P) [npop,npts]
     aidstest  = simpars['aidstest']*dt  # HIV testing in AIDS stage (P) [npts]
-    numcirc   = simpars['numcirc']*dt   # Number of programmatic circumcisions performed (N)
+    numcirc   = (simpars['numcirc']*dt)/(1-simpars['propcirc'])   # Number of programmatic circumcisions performed (N)
+        # divided by (1-propcirc) to account for propcirc proportion of people in sus already being circumcised and not needing programmatic circumcision
+        # this results in an increase in circumcised people matching the desired number.
     numpmtct  = simpars['numpmtct']     # Number of people receiving PMTCT (N)
     
     # Uptake of OST
@@ -218,12 +221,11 @@ def model(simpars=None, settings=None, initpeople=None, verbose=None, die=False,
     effcondom = simpars['effcondom']                        # Condom effect
     circeff   = 1 - simpars['propcirc']*simpars['effcirc']  # Circumcision efficacy in group where a certain proportion of people are circumcised (susreg group)
     circconst = 1 - simpars['effcirc']                      # Circumcision efficacy in group where everyone is circumcised (progcirc group)
-    prepeff   = 1 - simpars['effprep']*simpars['prep']      # PrEP effect
+    prepeff   = 1 - simpars['effprep']*simpars['prep'] - simpars['effpep']*minimum(simpars['pep'], 1 - simpars['prep'])      # PEP + PrEP effect, assuming no overlap ->  if total of PEP + PrEP > 1 then reduce PEP
     osteff    = 1 - simpars['effost']*ostprev               # OST effect
     stieff    = 1 + simpars['effsti']*simpars['stiprev']    # STI effect
     effmtct   = simpars['mtctbreast']*simpars['breast'] + simpars['mtctnobreast']*(1-simpars['breast']) # Effective MTCT transmission
     pmtcteff  = (1 - simpars['effpmtct']) * effmtct         # Effective MTCT transmission whilst on PMTCT
-
     allcirceff = einsum('i,j',[1,circconst],male)+einsum('i,j',[1,1],female)
     alleff = einsum('ab,ab,ab,ca->abc',prepeff,stieff,circeff,allcirceff)
 
@@ -623,15 +625,28 @@ def model(simpars=None, settings=None, initpeople=None, verbose=None, die=False,
         # Diagnosed/lost to care
         if userate(propcare,t):
             careprob = [linktocare[:,t]]*ncd4
-            for cd4 in range(aidsind, ncd4): careprob[cd4] = maximum(aidslinktocare[t],linktocare[:,t])
-        else: careprob = zeros(ncd4)
-        for cd4ind, fromstate in enumerate(dxnotincare):  # 2 categories x 6 states per category = 12 states
+            returnprob = [returntocare[:,t]]*ncd4
+            for cd4 in range(aidsind, ncd4):
+                careprob[cd4]   = maximum(aidslinktocare[t],linktocare[:,t])
+                returnprob[cd4] = maximum(aidslinktocare[t],returntocare[:,t])
+        else:
+            careprob   = zeros(ncd4)
+            returnprob = zeros(ncd4)
+        for cd4ind, fromstate in enumerate(dx):  # 1 categories x 6 states per category = 6 states
             cd4 = cd4ind%ncd4 # Convert from state index to actual CD4 index
             for tostate in fromto[fromstate]:
-                if tostate in dxnotincare: # Probability of not moving into care
+                if tostate in dx: # Probability of not moving into care for diagnosed but not yet in care
                     thistransit[fromstate,tostate,:] *= (1.-careprob[cd4])
                 else: # Probability of moving into care
                     thistransit[fromstate,tostate,:] *= careprob[cd4]
+        for cd4ind, fromstate in enumerate(lost):  # 1 categories x 6 states per category = 6 states
+            cd4 = cd4ind%ncd4 # Convert from state index to actual CD4 index
+            for tostate in fromto[fromstate]:
+                if tostate in lost: # Probability of not returning to care for diagnosed and lost to follow-up
+                    thistransit[fromstate,tostate,:] *= (1.-returnprob[cd4])
+                else: # Probability of returning to care
+                    thistransit[fromstate,tostate,:] *= returnprob[cd4]
+
 
         # Care/USVL/SVL to lost
         if userate(propcare,t):

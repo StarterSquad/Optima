@@ -893,7 +893,7 @@ class Program(object):
         if costcovdatum['t'] not in self.costcovdata['t']:
             self.costcovdata['t'].append(costcovdatum['t'])
             self.costcovdata['cost'].append(costcovdatum['cost'])
-            if costcovdatum.get('coverage'):
+            if costcovdatum.get('coverage') or ('coverage' in costcovdatum.keys() and costcovdatum.get('coverage') == 0):
                 self.costcovdata['coverage'].append(costcovdatum['coverage'])
             else:
                 self.costcovdata['coverage'].append(None)

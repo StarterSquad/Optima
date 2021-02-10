@@ -77,6 +77,7 @@ def setmigrations(which='migrations'):
         ('2.9.1', ('2.9.2', '2019-12-04', None,              'Add PrEP for injection-related infections')),
         ('2.9.2', ('2.9.3', '2020-02-24', None,              'Improves scenario export, changes district budget allocation algorithm, and contains frontend fixes')),
         ('2.9.3', ('2.9.4', '2020-02-25', addprogdefault,    'Add default values for parameters in absence of programs')),
+        ('2.9.4', ('2.10.0', '2021-02-09', addpepreturntocare,'Add PEP parameters, rename PrEP parameters, and add a return to care parameter distinct from link to care')),
         ])
     
     
@@ -948,7 +949,7 @@ def addcascadeopt(project=None, portfolio=None, **kwargs):
         objectives['propdiag']       = 0
         objectives['proptreat']      = 0
         objectives['propsuppressed'] = 0
-        objectives.pop('keylabels') # Never used
+#        objectives.pop('keylabels') # Never used
     return None
 
 
@@ -990,6 +991,75 @@ def addprogdefault(project=None, **kwargs):
         raise Exception('Must supply a project')
     return None
 
+
+def addpepreturntocare(project=None, **kwargs):
+    '''
+    Migration between Optima 2.9.4 and 2.10.0 -- Add PEP parameters, rename PrEP parameters, and add a return to care parameter distinct from link to care
+    '''
+    if project is not None:
+        #rename prep pars
+        # Rename PrEP
+        #rename and re-add circumcision parameters
+        for ps in project.parsets.values():
+            ps.pars['prep'].name    = 'Proportion of exposure events covered by ARV-based pre-exposure prophylaxis'
+            ps.pars['effprep'].name = 'Efficacy of ARV-based pre-exposure prophylaxis'
+            ps.pars['propcirc'].name = 'Percentage of males who have been traditionally circumcised'
+            ps.pars['numcirc'].name = 'Number of voluntary medical male circumcisions'
+        #add PEP pars
+        short = 'pep'
+        copyfrom = 'prep'
+        kwargs['by'] = 'pop'
+        kwargs['name'] = 'Proportion of exposure events covered by ARV-based post-exposure prophylaxis'
+        kwargs['dataname'] = 'Proportion of exposure events covered by ARV-based post-exposure prophylaxis'
+        kwargs['datashort'] = 'pep'
+        kwargs['t'] = op.odict([(pop,array([2000.])) for pop in ps.popkeys])
+        kwargs['y'] = op.odict([(pop,array([0.00])) for pop in ps.popkeys])
+        addparameter(project=project, copyfrom=copyfrom, short=short, **kwargs)
+        
+        short = 'effpep'
+        copyfrom = 'effprep'
+        kwargs['by'] = 'tot'
+        kwargs['name'] = 'Efficacy of ARV-based pre-exposure prophylaxis'
+        kwargs['dataname'] = 'Efficacy of ARV-based pre-exposure prophylaxis'
+        kwargs['datashort'] = 'effpep'
+        if 't' in kwargs.keys(): kwargs.pop('t')
+        kwargs['y'] = 0.73 #default efficacy value of PrEP
+        addparameter(project=project, copyfrom=copyfrom, short=short, **kwargs)
+        
+        #add return to care par - all values should be copied from link to care to maintain consistency
+        short = 'returntocare'
+        copyfrom = 'linktocare'
+        kwargs['by'] = 'pop'
+        kwargs['name'] = 'Average time taken to be returned to care after loss to follow-up (years)'
+        kwargs['dataname'] = 'Average time taken to be returned to care after loss to follow-up (years)'
+        kwargs['datashort'] = 'returntocare'
+        if 't' in kwargs.keys(): kwargs.pop('t')
+        if 'y' in kwargs.keys(): kwargs.pop('y')
+        addparameter(project=project, copyfrom=copyfrom, short=short, **kwargs)
+        
+        
+        #add data for PEP, PrEP, and return to care
+        project.data['meta']['sheets']['Sexual behavior'].append('numcirc')
+        project.data['numcirc'] = [[nan]*len(project.data['years']) for _ in range(project.data['npops'])]
+        project.data['meta']['sheets']['Constants'].append('effpep')
+        project.data['effpep'] = [0.73, 0.65, 0.80]
+        project.data['meta']['sheets']['Testing & treatment'].append('pep')
+        project.data['pep'] = [[nan]*len(project.data['years']) for _ in range(project.data['npops'])]
+        project.data['meta']['sheets']['Cascade'].append('returntocare')
+        project.data['returntocare'] = [[nan]*len(project.data['years']) for _ in range(project.data['npops'])]
+        
+        
+        #Rename year to fix parameters to clarify their use
+        for ps in project.parsets.values():
+            ps.pars['fixpropdx'].name    = 'Year to fix proportion of PLHIV aware of their status'
+            ps.pars['fixpropcare'].name  = 'Year to fix proportion of diagnosed PLHIV in care'
+            ps.pars['fixproptx'].name    = 'Year to fix proportion of PLHIV in care on treatment'
+            ps.pars['fixpropsupp'].name  = 'Year to fix proportion of people on ART with viral suppression'
+            ps.pars['fixproppmtct'].name = 'Year to fix proportion of pregnant women and mothers on PMTCT'
+        
+    else:
+        raise Exception('Must supply a project')
+    return None
 
 
 
